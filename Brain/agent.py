@@ -58,13 +58,14 @@ class SACAgent:
         action, _ = self.policy_network.sample_or_likelihood(states)
         return action.detach().cpu().numpy()[0]
 
-    def store(self, state, z, done, action, next_state):
-        state = from_numpy(state).float().to("cpu")
-        z = torch.ByteTensor([z]).to("cpu")
-        done = torch.BoolTensor([done]).to("cpu")
-        action = torch.Tensor([action]).to("cpu")
-        next_state = from_numpy(next_state).float().to("cpu")
-        self.memory.add(state, z, done, action, next_state)
+    def store(self, state, z, done, action, next_state, reward, device="cpu"):
+        state = from_numpy(state).float().to(device)
+        z = torch.ByteTensor([z]).to(device)
+        done = torch.BoolTensor([done]).to(device)
+        action = from_numpy(np.asarray([action])).to(device)
+        next_state = from_numpy(next_state).float().to(device)
+        reward = torch.Tensor([reward]).float().to(device)
+        self.memory.add(state, z, done, action, next_state, reward)
 
     def unpack(self, batch):
         batch = Transition(*zip(*batch))
@@ -74,15 +75,15 @@ class SACAgent:
         dones = torch.cat(batch.done).view(self.batch_size, 1).to(self.device)
         actions = torch.cat(batch.action).view(-1, self.config["n_actions"]).to(self.device)
         next_states = torch.cat(batch.next_state).view(self.batch_size, self.n_states + self.n_skills).to(self.device)
-
-        return states, zs, dones, actions, next_states
+        rewards = torch.cat(batch.reward).view(self.batch_size, 1).to(self.device)
+        return states, zs, dones, actions, next_states, rewards
 
     def train(self):
         if len(self.memory) < self.batch_size:
             return None
         else:
             batch = self.memory.sample(self.batch_size)
-            states, zs, dones, actions, next_states = self.unpack(batch)
+            states, zs, dones, actions, next_states, env_rewards = self.unpack(batch)
             p_z = from_numpy(self.p_z).to(self.device)
 
             # Calculating the value target

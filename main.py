@@ -1,6 +1,7 @@
 import gym
 from Brain import SACAgent
-from Common import Play, Logger, get_params
+from Common import Logger, get_params
+#from Common import Play
 import numpy as np
 from tqdm import tqdm
 import mujoco_py
@@ -69,7 +70,7 @@ if __name__ == "__main__":
                 action = agent.choose_action(state)
                 next_state, reward, done, _ = env.step(action)
                 next_state = concat_state_latent(next_state, z, params["n_skills"])
-                agent.store(state, z, done, action, next_state)
+                agent.store(state, z, done, action, next_state, reward)
                 logq_zs = agent.train()
                 if logq_zs is None:
                     logq_zses.append(last_logq_zs)
