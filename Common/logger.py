@@ -12,28 +12,29 @@ class Logger:
     def __init__(self, agent, **config):
         self.config = config
         self.agent = agent
-        self.log_dir = self.config["env_name"][:-3] + "/" + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        self.log_dir = self.config["env_name"][:-3] + "/" + (self.config["agent_name"] + "/" if self.config["agent_name"] != "" else "") + datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         self.start_time = 0
         self.duration = 0
         self.running_logq_zs = 0
         self.max_episode_reward = -np.inf
         self._turn_on = False
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
+        self.writer = SummaryWriter("Logs/" + self.log_dir)
 
         if self.config["do_train"] and self.config["train_from_scratch"]:
-            self._create_wights_folder(self.log_dir)
+            self._create_weights_folder(self.log_dir)
             self._log_params()
 
     @staticmethod
-    def _create_wights_folder(dir):
+    def _create_weights_folder(dir):
         if not os.path.exists("Checkpoints"):
             os.mkdir("Checkpoints")
-        os.mkdir("Checkpoints/" + dir)
+        os.makedirs("Checkpoints/" + dir, exist_ok=True)
+        print("Created directory " + "Checkpoints/" + dir)
 
     def _log_params(self):
-        with SummaryWriter("Logs/" + self.log_dir) as writer:
-            for k, v in self.config.items():
-                writer.add_text(k, str(v))
+        for k, v in self.config.items():
+            self.writer.add_text(k, str(v))
 
     def on(self):
         self.start_time = time.time()
@@ -60,7 +61,7 @@ class Logger:
         ram = psutil.virtual_memory()
         assert self.to_gb(ram.used) < 0.98 * self.to_gb(ram.total), "RAM usage exceeded permitted limit!"
 
-        if episode % (self.config["interval"] // 3) == 0:
+        if episode % self.config["interval"] == 0:
             self._save_weights(episode, *rng_states)
 
         if episode % self.config["interval"] == 0:
@@ -82,13 +83,16 @@ class Logger:
                                      datetime.datetime.now().strftime("%H:%M:%S"),
                                      ))
 
-        with SummaryWriter("Logs/" + self.log_dir) as writer:
-            writer.add_scalar("Max episode reward", self.max_episode_reward, episode)
-            writer.add_scalar("Running logq(z|s)", self.running_logq_zs, episode)
-            writer.add_histogram(str(skill), episode_reward)
-            writer.add_histogram("Total Rewards", episode_reward)
+        self.writer.add_scalar("Max episode reward", self.max_episode_reward, episode)
+        self.writer.add_scalar("Running logq(z|s)", self.running_logq_zs, episode)
+        self.writer.add_histogram(f"Rewards for skill={str(skill)}", episode_reward)
+        self.writer.add_histogram("Total Rewards", episode_reward)
 
         self.on()
+
+    def log_train(self, loss_dict, train_iter):
+        for k,v in loss_dict.items():
+            self.writer.add_scalar(k, v, train_iter)
 
     def _save_weights(self, episode, *rng_states):
         torch.save({"policy_network_state_dict": self.agent.policy_network.state_dict(),
@@ -109,9 +113,11 @@ class Logger:
                    "Checkpoints/" + self.log_dir + "/params.pth")
 
     def load_weights(self):
-        model_dir = glob.glob("Checkpoints/" + self.config["env_name"][:-3] + "/")
+        model_dir_matchstring = "Checkpoints/" + self.config["env_name"][:-3] + "/" + ((self.config["agent_name"] + "/") if self.config["agent_name"] != "" else "") + "**/params.pth"
+        model_dir = glob.glob(model_dir_matchstring)
         model_dir.sort()
-        checkpoint = torch.load(model_dir[-1] + "/params.pth")
+        print(model_dir_matchstring)
+        checkpoint = torch.load(model_dir[-1])
         self.log_dir = model_dir[-1].split(os.sep)[-1]
         self.agent.policy_network.load_state_dict(checkpoint["policy_network_state_dict"])
         self.agent.q_value_network1.load_state_dict(checkpoint["q_value_network1_state_dict"])

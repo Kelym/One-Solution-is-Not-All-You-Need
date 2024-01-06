@@ -1,5 +1,5 @@
 import gym
-from Brain import SACAgent
+from Brain import DSACAgent
 from Common import Logger, get_params
 from Common import Play
 import numpy as np
@@ -31,8 +31,10 @@ if __name__ == "__main__":
     env = gym.make(params["env_name"])
 
     p_z = np.full(params["n_skills"], 1 / params["n_skills"])
-    agent = SACAgent(p_z=p_z, **params)
+    agent = DSACAgent(p_z=p_z, **params)
     logger = Logger(agent, **params)
+
+    agent.logger = logger
 
     if params["do_train"]:
 
@@ -71,27 +73,34 @@ if __name__ == "__main__":
                 next_state, reward, done, _ = env.step(action)
                 next_state = concat_state_latent(next_state, z, params["n_skills"])
                 agent.store(state, z, done, action, next_state, reward)
-                logq_zs = agent.train()
-                if logq_zs is None:
-                    logq_zses.append(last_logq_zs)
-                else:
-                    logq_zses.append(logq_zs)
                 episode_reward += reward
                 state = next_state
                 if done:
                     break
 
-            logger.log(episode,
-                       episode_reward,
-                       z,
-                       sum(logq_zses) / len(logq_zses),
-                       step,
-                       np.random.get_state(),
-                       env.np_random.get_state(),
-                       env.observation_space.np_random.get_state(),
-                       env.action_space.np_random.get_state(),
-                       *agent.get_rng_states(),
-                       )
+            # OSINAYN does not add diversity reward UNTIL after the policy is close to the optimal
+            train_with_diversity = (episode_reward > params["reward_epsilon"])
+            # alternatively using logger.max_episode_reward ?
+            losses_list = []
+            for step in range(1, 1 + max_n_steps):
+                losses = agent.train(diversity_reward=train_with_diversity)
+                if losses is not None: losses_list.append(losses)
+
+            if len(losses_list):
+                loss_dict = {k: np.average([dic[k] for dic in losses_list]) for k in losses_list[0].keys()}
+
+                logger.log(episode,
+                           episode_reward,
+                           z,
+                           -loss_dict['discriminator_loss'], # log q(z|s)
+                           step,
+                           np.random.get_state(),
+                           env.np_random.get_state(),
+                           env.observation_space.np_random.get_state(),
+                           env.action_space.np_random.get_state(),
+                           *agent.get_rng_states(),
+                           )
+                logger.log_train(loss_dict, episode)
 
     else:
         logger.load_weights()
