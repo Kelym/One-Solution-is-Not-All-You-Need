@@ -105,4 +105,6 @@ if __name__ == "__main__":
     else:
         logger.load_weights()
         player = Play(env, agent, n_skills=params["n_skills"])
-        player.evaluate()
+        env_name=params["env_name"]
+        agent_name=params["agent_name"]
+        player.evaluate(folder_name=f"Vid/{env_name}/{agent_name}")

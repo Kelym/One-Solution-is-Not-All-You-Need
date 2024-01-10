@@ -24,10 +24,11 @@ class Play:
         z_one_hot[z_] = 1
         return np.concatenate([s, z_one_hot])
 
-    def evaluate(self):
+    def evaluate(self, folder_name="Vid"):
+        os.makedirs(folder_name, exist_ok=True)
 
         for z in range(self.n_skills):
-            video_writer = cv2.VideoWriter(f"Vid/skill{z}" + ".avi", self.fourcc, 50.0, (250, 250))
+            video_writer = cv2.VideoWriter(f"{folder_name}/skill{z}" + ".avi", self.fourcc, 50.0, (250, 250))
             s = self.env.reset()
             s = self.concat_state_latent(s, z, self.n_skills)
             episode_reward = 0
