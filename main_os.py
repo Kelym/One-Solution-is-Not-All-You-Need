@@ -1,7 +1,6 @@
 import gym
 from Brain import DSACAgent
 from Common import Logger, get_params
-from Common import Play
 import numpy as np
 from tqdm import tqdm
 import mujoco_py
@@ -103,6 +102,7 @@ if __name__ == "__main__":
                 logger.log_train(loss_dict, episode)
 
     else:
+        from Common import Play
         logger.load_weights()
         player = Play(env, agent, n_skills=params["n_skills"])
         env_name=params["env_name"]

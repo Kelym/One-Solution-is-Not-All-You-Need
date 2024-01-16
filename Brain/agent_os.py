@@ -52,6 +52,19 @@ class DSACAgent:
         self.policy_opt = Adam(self.policy_network.parameters(), lr=self.config["lr"])
         self.discriminator_opt = Adam(self.discriminator.parameters(), lr=self.config["lr"])
 
+        # Tunable Entropy
+        self.auto_entropy_tuning = config["auto_entropy_tuning"]
+        if self.auto_entropy_tuning:
+            self.target_entropy = (
+                config["alpha"] or -self.config["n_actions"])  # heuristic target entropy
+            self.target_entropy = torch.tensor(self.target_entropy, requires_grad=False, device=self.device)
+            self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+            self.alpha_optimizer = Adam(
+                [self.log_alpha],
+                lr=self.config["lr"],
+            )
+            print("Enable auto entropy tuning")
+
     def choose_action(self, states):
         states = np.expand_dims(states, axis=0)
         states = from_numpy(states).float().to(self.device)
@@ -115,9 +128,20 @@ class DSACAgent:
             q1_loss = self.mse_loss(q1, target_q)
             q2_loss = self.mse_loss(q2, target_q)
 
+            # Entropy Loss
+            if self.auto_entropy_tuning:
+                alpha_loss = -(self.log_alpha * (log_probs + self.target_entropy).detach()).mean()
+                self.alpha_optimizer.zero_grad()
+                alpha_loss.backward()
+                self.alpha_optimizer.step()
+                alpha = self.log_alpha.exp()
+            else:
+                alpha_loss = 0
+                alpha = self.config["alpha"]
+
             # Calculate the policy loss
             # Standard SAC (with reparam trick a \sim policy): J_pi = log pi(a|s) - q(s,a)
-            policy_loss = (self.config["alpha"] * log_probs - q).mean()
+            policy_loss = (alpha * log_probs - q).mean()
 
             # Discriminator loss
             logits = self.discriminator(torch.split(states, [self.n_states, self.n_skills], dim=-1)[0])
@@ -151,7 +175,9 @@ class DSACAgent:
                 'q_loss': 0.5 * (q1_loss + q2_loss).item(),
                 'q1_loss':q1_loss.item(),
                 'q2_loss':q2_loss.item(),
-                'discriminator_loss':discriminator_loss.item()
+                'discriminator_loss':discriminator_loss.item(),
+                'alpha': alpha.item() if self.auto_entropy_tuning else alpha,
+                'alpha_loss': alpha_loss.item() if self.auto_entropy_tuning else alpha_loss,
                 }
 
     def soft_update_target_network(self, local_network, target_network):
