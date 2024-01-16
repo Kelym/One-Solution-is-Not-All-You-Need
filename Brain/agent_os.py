@@ -99,14 +99,13 @@ class DSACAgent:
             # Calculating the Q-Value target
             # Standard SAC: J_Q = Q(s,a) - (r + gamma * V(s+1))
             # DIAYN: define r = H(A|S,Z) + E_{z \sim p(z), s \sim pi(z)}[log discriminator(z|s) - log p(z)]
-            logits = self.discriminator(torch.split(next_states, [self.n_states, self.n_skills], dim=-1)[0])
-            logq_z_ns = log_softmax(logits, dim=-1)
-            rewards = 0
+            rewards = env_rewards if not self.config["omit_env_rewards"] else 0
 
             if diversity_reward:
-                rewards += self.config["reward_balance"] * (logq_z_ns.gather(-1, zs).detach() - torch.log(p_z.gather(-1, zs) + 1e-6)).float()
-            if self.config["include_env_rewards"]:
-                rewards += env_rewards
+                next_logits = self.discriminator(torch.split(next_states, [self.n_states, self.n_skills], dim=-1)[0])
+                logq_z_ns = log_softmax(next_logits, dim=-1)
+                disciminator_reward = (logq_z_ns.gather(-1, zs).detach() - torch.log(p_z.gather(-1, zs) + 1e-6)).float()
+                rewards += self.config["reward_balance"] * disciminator_reward
 
             with torch.no_grad():
                 target_q = self.config["reward_scale"] * rewards.float() + \
@@ -119,6 +118,8 @@ class DSACAgent:
             # Calculate the policy loss
             # Standard SAC (with reparam trick a \sim policy): J_pi = log pi(a|s) - q(s,a)
             policy_loss = (self.config["alpha"] * log_probs - q).mean()
+
+            # Discriminator loss
             logits = self.discriminator(torch.split(states, [self.n_states, self.n_skills], dim=-1)[0])
             discriminator_loss = self.cross_ent_loss(logits, zs.squeeze(-1))
 
@@ -147,6 +148,7 @@ class DSACAgent:
             return {
                 'policy_loss':policy_loss.item(),
                 'value_loss':value_loss.item(),
+                'q_loss': 0.5 * (q1_loss + q2_loss).item(),
                 'q1_loss':q1_loss.item(),
                 'q2_loss':q2_loss.item(),
                 'discriminator_loss':discriminator_loss.item()

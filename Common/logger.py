@@ -85,6 +85,7 @@ class Logger:
 
         self.writer.add_scalar("Max episode reward", self.max_episode_reward, episode)
         self.writer.add_scalar("Running logq(z|s)", self.running_logq_zs, episode)
+        self.writer.add_scalar(f"Skill {str(skill)} rewards", episode_reward, episode)
         self.writer.add_histogram(f"Rewards for skill={str(skill)}", episode_reward)
         self.writer.add_histogram("Total Rewards", episode_reward)
 
