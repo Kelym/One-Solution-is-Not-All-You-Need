@@ -55,15 +55,18 @@ class DSACAgent:
         # Tunable Entropy
         self.auto_entropy_tuning = config["auto_entropy_tuning"]
         if self.auto_entropy_tuning:
-            self.target_entropy = (
-                config["alpha"] or -self.config["n_actions"])  # heuristic target entropy
-            self.target_entropy = torch.tensor(self.target_entropy, requires_grad=False, device=self.device)
-            self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
-            self.alpha_optimizer = Adam(
-                [self.log_alpha],
-                lr=self.config["lr"],
-            )
+            self.init_entropy()
             print("Enable auto entropy tuning")
+
+    def init_entropy(self, value=0.):
+        self.target_entropy = (
+            self.config["alpha"] or -self.config["n_actions"])  # heuristic target entropy
+        self.target_entropy = torch.tensor(self.target_entropy, requires_grad=False, device=self.device)
+        self.log_alpha = torch.tensor(value, requires_grad=True, device=self.device)
+        self.alpha_optimizer = Adam(
+            [self.log_alpha],
+            lr=self.config["lr"],
+        )
 
     def choose_action(self, states):
         states = np.expand_dims(states, axis=0)

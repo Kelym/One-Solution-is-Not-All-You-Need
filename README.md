@@ -7,8 +7,9 @@
 **The DIAYN part of the code is based on [this repo](https://github.com/alirezakazemipour/DIAYN-Pytorch).**
 
 Changes:
+- Save and load replay buffer to enable pause / resume training
 - Automatic tuning of entropy alpha
-- Follow One Solution paper to consider env rewards when training the policy
+- Consider env rewards when training the policy
 
 ## Dependencies
 - gym == 0.21

@@ -1,5 +1,6 @@
 import random
 from collections import namedtuple
+import torch
 
 Transition = namedtuple('Transition', ('state', 'z', 'done', 'action', 'next_state', 'reward'))
 
@@ -22,6 +23,13 @@ class Memory:
 
     def __len__(self):
         return len(self.buffer)
+
+    def save_buffer(self, fn_path):
+        torch.save(self.buffer, fn_path)
+
+    def load_buffer(self, fn_path):
+        buffer = torch.load(fn_path)
+        self.buffer = buffer
 
     @staticmethod
     def get_rng_state():

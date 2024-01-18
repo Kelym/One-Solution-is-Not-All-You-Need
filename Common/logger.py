@@ -21,7 +21,7 @@ class Logger:
         self.to_gb = lambda in_bytes: in_bytes / 1024 / 1024 / 1024
         self.writer = SummaryWriter("Logs/" + self.log_dir)
 
-        if self.config["do_train"] and self.config["train_from_scratch"]:
+        if self.config["do_train"]:
             self._create_weights_folder(self.log_dir)
             self._log_params()
 
@@ -96,6 +96,7 @@ class Logger:
             self.writer.add_scalar(k, v, train_iter)
 
     def _save_weights(self, episode, *rng_states):
+        self.agent.memory.save_buffer("Checkpoints/" + self.log_dir + "/replay.pt")
         torch.save({"policy_network_state_dict": self.agent.policy_network.state_dict(),
                     "q_value_network1_state_dict": self.agent.q_value_network1.state_dict(),
                     "q_value_network2_state_dict": self.agent.q_value_network2.state_dict(),
@@ -110,16 +111,29 @@ class Logger:
                     "rng_states": rng_states,
                     "max_episode_reward": self.max_episode_reward,
                     "running_logq_zs": self.running_logq_zs
-                    },
+                    } | ({} if not self.agent.auto_entropy_tuning else {
+                        "log_alpha": self.agent.log_alpha.item(),
+                        "alpha_optimizer_state_dict": self.agent.alpha_optimizer.state_dict(),
+                    }),
                    "Checkpoints/" + self.log_dir + "/params.pth")
 
     def load_weights(self):
-        model_dir_matchstring = "Checkpoints/" + self.config["env_name"][:-3] + "/" + ((self.config["agent_name"] + "/") if self.config["agent_name"] != "" else "") + "**/params.pth"
-        model_dir = glob.glob(model_dir_matchstring)
-        model_dir.sort()
+        model_dir_matchstring = os.getcwd() + "/Checkpoints/" + self.config["env_name"][:-3] + "/" + ((self.config["agent_name"] + "/") if self.config["agent_name"] != "" else "") + "**/params.pth"
         print(model_dir_matchstring)
-        checkpoint = torch.load(model_dir[-1])
-        self.log_dir = model_dir[-1].split(os.sep)[-1]
+        model_dir = list(glob.glob(model_dir_matchstring))
+        model_dir.sort()
+        print(model_dir)
+        model_dir = model_dir[-1]
+        checkpoint = torch.load(model_dir)
+
+        replay_fn = model_dir.replace("params.pth", "replay.pt")
+        self.agent.memory.load_buffer(replay_fn)
+
+        if self.agent.auto_entropy_tuning:
+            self.agent.init_entropy(checkpoint["log_alpha"])
+            self.agent.alpha_optimizer.load_state_dict(checkpoint["alpha_optimizer_state_dict"])
+
+        #self.log_dir = model_dir.split(os.sep)[-1]
         self.agent.policy_network.load_state_dict(checkpoint["policy_network_state_dict"])
         self.agent.q_value_network1.load_state_dict(checkpoint["q_value_network1_state_dict"])
         self.agent.q_value_network2.load_state_dict(checkpoint["q_value_network2_state_dict"])

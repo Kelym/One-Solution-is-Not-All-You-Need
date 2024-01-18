@@ -7,7 +7,7 @@ def get_params():
 
     parser.add_argument("--env_name", default="BipedalWalker-v3", type=str, help="Name of the environment.")
     parser.add_argument("--agent_name", default="", type=str, help="Name of the agent.")
-    parser.add_argument("--interval", default=20, type=int,
+    parser.add_argument("--interval", default=100, type=int,
                         help="The interval specifies how often different parameters should be saved and printed,"
                              " counted by episodes.")
     parser.add_argument("--do_train", action="store_true",
